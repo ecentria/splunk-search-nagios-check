@@ -1,0 +1,21 @@
+#!/usr/bin/env python
+import splunklib.client as client
+import argparse
+
+parser = argparse.ArgumentParser(description='Splunk arguments')
+parser.add_argument('--host', help='Splunk hostname')
+parser.add_argument('--user', help='Splunk username')
+parser.add_argument('--password', help='Splunk password')
+parser.add_argument('--warning', help='Warning threshold')
+parser.add_argument('--critical', help='Critical threshold')
+parser.add_argument('search', help="Search string to be executed")
+
+args = parser.parse_args()
+
+service = client.connect(
+        host=args.host,
+        username=args.user,
+        password=args.password)
+
+print service.jobs.oneshot("search %s | stats count(_raw)" % args.search)
+
