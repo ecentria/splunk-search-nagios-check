@@ -1,21 +1,68 @@
 #!/usr/bin/env python
 import splunklib.client as client
+import splunklib.results as results
 import argparse
+import sys
+
+STATUS_OK = 0
+STATUS_WARNING = 1
+STATUS_CRITICAL = 2
+STATUS_UNKNOWN = 3
 
 parser = argparse.ArgumentParser(description='Splunk arguments')
 parser.add_argument('--host', help='Splunk hostname')
 parser.add_argument('--user', help='Splunk username')
 parser.add_argument('--password', help='Splunk password')
-parser.add_argument('--warning', help='Warning threshold')
-parser.add_argument('--critical', help='Critical threshold')
+parser.add_argument('--warning', type=int, help='Warning threshold')
+parser.add_argument('--critical', type=int, help='Critical threshold')
 parser.add_argument('search', help="Search string to be executed")
 
 args = parser.parse_args()
 
-service = client.connect(
+try:
+    service = client.connect(
         host=args.host,
         username=args.user,
         password=args.password)
+except Exception as e:
+    print "Error connecting to Splunk: %s" % e
+    sys.exit(STATUS_UNKNOWN)
 
-print service.jobs.oneshot("search %s | stats count(_raw)" % args.search)
+
+# We'll collect results of our job in here
+numEvents = None
+messages = ''
+try:
+    # Splunk streams search restuls, even for one shot searches, so have to use their results reader to be safe.
+    rr=results.ResultsReader(service.jobs.oneshot("search %s | stats count(_raw)" % args.search))
+    for result in rr:
+        if isinstance(result, results.Message):
+            # Diagnostic messages may be returned in the results
+            messages += "%s: %s; \n" % (result.type, result.message)
+        elif isinstance(result, dict):
+            # Normal events are returned as dicts
+            if numEvents is not None:
+                # This means we have multiple count results, while we're expecting only one
+                messages += "Multiple result rows encountered, which is not expected to happen.\n"
+            # We expect only one event, as we added aggregation function
+            numEvents = int(result["count(_raw)"])
+except Exception as e:
+    print "Error running Splunk query: %s" % e
+    sys.exit(STATUS_UNKNOWN)
+
+if numEvents > args.critical:
+    print "Found %d events (> %d for critical level)\n%s" % (numEvents, args.critical, messages)
+    sys.exit(STATUS_CRITICAL)
+elif numEvents > args.warning:
+    print "Found %d events (> %d for warning level)\n%s" % (numEvents, args.warning, messages)
+    sys.exit(STATUS_WARNING)
+elif messages != '':
+    print "Found %d events, but got errors from Splunk:\n%s" % (numEvents, messages)
+    sys.exit(STATUS_UNKNOWN)
+elif numEvents is None:
+    print "No event counter in the search result. Check splunk or query.\n%s" % (numEvents, messages)
+    sys.exit(STATUS_UNKNOWN)
+else:
+    print "Found %d events" % numEvents
+    sys.exit(STATUS_OK)
 
