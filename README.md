@@ -29,7 +29,7 @@ but most likely you want to limit it to the most recent hours or days. Otherwise
 
 # Other things to note
 
-Internally, plugin adds "| stats count(_raw)" at the end of the query to get just one number, instead of the whole feed. 
+Internally, plugin adds `| stats count(_raw)` at the end of the query to get just one number, instead of the whole feed. 
 Currently there is no support for alternative aggregation methods.
 
 With SDK's "one shot" method, it's unclear if results reader would always wait for search to fully complete, or will 
